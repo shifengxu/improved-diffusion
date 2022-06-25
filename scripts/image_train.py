@@ -3,6 +3,9 @@ Train a diffusion model on images.
 """
 
 import argparse
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "1,2"
+import torch
 
 from improved_diffusion import dist_util, logger
 from improved_diffusion.image_datasets import load_data
@@ -20,7 +23,11 @@ def main():
     args = create_argparser().parse_args()
 
     dist_util.setup_dist()
-    logger.configure()
+    logger.configure(dir='./log')
+    logger.log(f"pid   : {os.getpid()}")
+    logger.log(f"cwd   : {os.getcwd()}")
+    logger.log(f"torch.initial_seed(): {torch.initial_seed()}")
+    logger.log(args)
 
     logger.log("creating model and diffusion...")
     model, diffusion = create_model_and_diffusion(
@@ -59,12 +66,12 @@ def main():
 
 def create_argparser():
     defaults = dict(
-        data_dir="",
+        data_dir="./datasets/cifar_train",
         schedule_sampler="uniform",
         lr=1e-4,
         weight_decay=0.0,
         lr_anneal_steps=0,
-        batch_size=1,
+        batch_size=64,
         microbatch=-1,  # -1 disables microbatches
         ema_rate="0.9999",  # comma-separated list of EMA values
         log_interval=10,

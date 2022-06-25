@@ -397,6 +397,8 @@ class Logger(object):
     def _do_log(self, args):
         for fmt in self.output_formats:
             if isinstance(fmt, SeqWriter):
+                s = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                args = [f"[{s}]", *args]
                 fmt.writeseq(map(str, args))
 
 
