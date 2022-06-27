@@ -3,6 +3,8 @@ import torch as th
 
 from .gaussian_diffusion import GaussianDiffusion
 
+log_fn = print
+
 
 def space_timesteps(num_timesteps, section_counts):
     """
@@ -73,6 +75,10 @@ class SpacedDiffusion(GaussianDiffusion):
         self.use_timesteps = set(use_timesteps)
         self.timestep_map = []
         self.original_num_steps = len(kwargs["betas"])
+        log_fn(f"SpacedDiffusion(GaussianDiffusion)")
+        log_fn(f"  use_timesteps  len: {len(self.use_timesteps)}")
+        log_fn(f"  timestep_map      : {self.timestep_map}")
+        log_fn(f"  original_num_steps: {self.original_num_steps}")
 
         base_diffusion = GaussianDiffusion(**kwargs)  # pylint: disable=missing-kwoa
         last_alpha_cumprod = 1.0

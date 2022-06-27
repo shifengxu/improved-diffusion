@@ -14,6 +14,8 @@ import torch as th
 from .nn import mean_flat
 from .losses import normal_kl, discretized_gaussian_log_likelihood
 
+log_fn = print
+
 
 def get_named_beta_schedule(schedule_name, num_diffusion_timesteps):
     """
@@ -128,6 +130,11 @@ class GaussianDiffusion:
         self.model_var_type = model_var_type
         self.loss_type = loss_type
         self.rescale_timesteps = rescale_timesteps
+        log_fn(f"GaussianDiffusion()")
+        log_fn(f"  model_mean_type  : {self.model_mean_type}")
+        log_fn(f"  model_var_type   : {self.model_var_type}")
+        log_fn(f"  loss_type        : {self.loss_type}")
+        log_fn(f"  rescale_timesteps: {self.rescale_timesteps}")
 
         # Use float64 for accuracy.
         betas = np.array(betas, dtype=np.float64)
@@ -136,6 +143,8 @@ class GaussianDiffusion:
         assert (betas > 0).all() and (betas <= 1).all()
 
         self.num_timesteps = int(betas.shape[0])
+        log_fn(f"  betas            : {self.betas.shape}")
+        log_fn(f"  num_timesteps    : {self.num_timesteps}")
 
         alphas = 1.0 - betas
         self.alphas_cumprod = np.cumprod(alphas, axis=0)
@@ -200,9 +209,8 @@ class GaussianDiffusion:
             noise = th.randn_like(x_start)
         assert noise.shape == x_start.shape
         return (
-            _extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
-            + _extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
-            * noise
+            _extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start +
+            _extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
         )
 
     def q_posterior_mean_variance(self, x_start, x_t, t):
@@ -708,11 +716,10 @@ class GaussianDiffusion:
                 terms["loss"] *= self.num_timesteps
         elif self.loss_type == LossType.MSE or self.loss_type == LossType.RESCALED_MSE:
             model_output = model(x_t, self._scale_timesteps(t), **model_kwargs)
+            # x_t and model_output both have shape: [B, C, H, W], such as [128, 3, 32, 32]
+            # t shape: [B], such as [128]
 
-            if self.model_var_type in [
-                ModelVarType.LEARNED,
-                ModelVarType.LEARNED_RANGE,
-            ]:
+            if self.model_var_type in [ModelVarType.LEARNED, ModelVarType.LEARNED_RANGE]:
                 B, C = x_t.shape[:2]
                 assert model_output.shape == (B, C * 2, *x_t.shape[2:])
                 model_output, model_var_values = th.split(model_output, C, dim=1)
@@ -731,10 +738,9 @@ class GaussianDiffusion:
                     # Without a factor of 1/1000, the VB term hurts the MSE term.
                     terms["vb"] *= self.num_timesteps / 1000.0
 
+            previous_x_val = self.q_posterior_mean_variance(x_start=x_start, x_t=x_t, t=t)[0]
             target = {
-                ModelMeanType.PREVIOUS_X: self.q_posterior_mean_variance(
-                    x_start=x_start, x_t=x_t, t=t
-                )[0],
+                ModelMeanType.PREVIOUS_X: previous_x_val,
                 ModelMeanType.START_X: x_start,
                 ModelMeanType.EPSILON: noise,
             }[self.model_mean_type]

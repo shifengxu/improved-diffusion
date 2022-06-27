@@ -65,7 +65,7 @@ class HumanOutputFormat(KVWriter, SeqWriter):
 
         # Write out the data
         dashes = "-" * (keywidth + valwidth + 7)
-        lines = [dashes]
+        lines = [dashes + datetime.datetime.now().strftime(" %Y-%m-%d %H:%M:%S.%f")[:-3]]
         for (key, val) in sorted(key2str.items(), key=lambda kv: kv[0].lower()):
             lines.append(
                 "| %s%s | %s%s |"
@@ -470,7 +470,7 @@ def configure(dir=None, format_strs=None, comm=None, log_suffix=""):
 
     Logger.CURRENT = Logger(dir=dir, output_formats=output_formats, comm=comm)
     if output_formats:
-        log("Logging to %s" % dir)
+        log(f"Logging to {dir}. output_formats: {', '.join([f.file.name for f in output_formats])}")
 
 
 def _configure_default_logger():

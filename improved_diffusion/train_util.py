@@ -268,27 +268,26 @@ class TrainLoop:
         if self.use_fp16:
             logger.logkv("lg_loss_scale", self.lg_loss_scale)
 
-    def save(self):
-        def save_checkpoint(rate, params):
-            state_dict = self._master_params_to_state_dict(params)
-            if dist.get_rank() == 0:
-                logger.log(f"saving model {rate}...")
-                if not rate:
-                    filename = f"model{(self.step+self.resume_step):06d}.pt"
-                else:
-                    filename = f"ema_{rate}_{(self.step+self.resume_step):06d}.pt"
-                with bf.BlobFile(bf.join(get_blob_logdir(), filename), "wb") as f:
-                    th.save(state_dict, f)
+    def _save_checkpoint(self, rate, params):
+        state_dict = self._master_params_to_state_dict(params)
+        if dist.get_rank() == 0:
+            if not rate:
+                filename = f"model{(self.step+self.resume_step):06d}.pt"
+            else:
+                filename = f"ema_{rate}_{(self.step+self.resume_step):06d}.pt"
+            path = bf.join(get_blob_logdir(), filename)
+            logger.log(f"saving model rate={rate}. writing to {path}")
+            with bf.BlobFile(path, "wb") as f:
+                th.save(state_dict, f)
 
-        save_checkpoint(0, self.master_params)
+    def save(self):
+        self._save_checkpoint(0, self.master_params)
         for rate, params in zip(self.ema_rate, self.ema_params):
-            save_checkpoint(rate, params)
+            self._save_checkpoint(rate, params)
 
         if dist.get_rank() == 0:
-            with bf.BlobFile(
-                bf.join(get_blob_logdir(), f"opt{(self.step+self.resume_step):06d}.pt"),
-                "wb",
-            ) as f:
+            path = bf.join(get_blob_logdir(), f"opt{(self.step+self.resume_step):06d}.pt")
+            with bf.BlobFile(path, "wb") as f:
                 th.save(self.opt.state_dict(), f)
 
         dist.barrier()
@@ -340,7 +339,7 @@ def find_resume_checkpoint():
 def find_ema_checkpoint(main_checkpoint, step, rate):
     if main_checkpoint is None:
         return None
-    filename = f"ema_{rate}_{(step):06d}.pt"
+    filename = f"ema_{rate}_{step:06d}.pt"
     path = bf.join(bf.dirname(main_checkpoint), filename)
     if bf.exists(path):
         return path

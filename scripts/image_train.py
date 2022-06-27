@@ -1,13 +1,27 @@
 """
 Train a diffusion model on images.
+
+train in a distributed manner:
+mpiexec -n $NUM_GPUS python scripts/image_train.py --data_dir path/to/images $ARGS
+
+Original paper:
+ICML - 2021 - Alex Nichol - Improved Denoising Diffusion Probabilistic Models
+
+Original code:
+https://github.com/shifengxu/improved-diffusion
+
+For CIFAR-10 we used 200K and 500K training iterations,
+and for ImageNet-64 we used 500K and 1500K training iterations.
 """
 
 import argparse
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1,2"
+if not os.environ.get("CUDA_VISIBLE_DEVICES"):
+    os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+
 import torch
 
-from improved_diffusion import dist_util, logger
+from improved_diffusion import dist_util, logger, unet, respace, gaussian_diffusion
 from improved_diffusion.image_datasets import load_data
 from improved_diffusion.resample import create_named_schedule_sampler
 from improved_diffusion.script_util import (
@@ -24,9 +38,13 @@ def main():
 
     dist_util.setup_dist()
     logger.configure(dir='./log')
+    unet.log_fn = logger.log
+    respace.log_fn = logger.log
+    gaussian_diffusion.log_fn = logger.log
     logger.log(f"pid   : {os.getpid()}")
     logger.log(f"cwd   : {os.getcwd()}")
     logger.log(f"torch.initial_seed(): {torch.initial_seed()}")
+    logger.log(f"os.environ['CUDA_VISIBLE_DEVICES']: {os.environ['CUDA_VISIBLE_DEVICES']}")
     logger.log(args)
 
     logger.log("creating model and diffusion...")

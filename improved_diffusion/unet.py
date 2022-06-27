@@ -19,6 +19,8 @@ from .nn import (
     checkpoint,
 )
 
+log_fn = print
+
 
 class TimestepBlock(nn.Module):
     """
@@ -332,6 +334,21 @@ class UNetModel(nn.Module):
         self.use_checkpoint = use_checkpoint
         self.num_heads = num_heads
         self.num_heads_upsample = num_heads_upsample
+        log_fn(f"UNetModel()")
+        log_fn(f"  in_channels   : {self.in_channels}")
+        log_fn(f"  model_channels: {self.model_channels}")
+        log_fn(f"  out_channels  : {self.out_channels}")
+        log_fn(f"  num_res_blocks: {self.num_res_blocks}")
+        log_fn(f"  dropout       : {self.dropout}")
+        log_fn(f"  channel_mult  : {self.channel_mult}")
+        log_fn(f"  conv_resample : {self.conv_resample}")
+        log_fn(f"  num_classes   : {self.num_classes}")
+        log_fn(f"  use_checkpoint: {self.use_checkpoint}")
+        log_fn(f"  num_heads     : {self.num_heads}")
+        log_fn(f"  dims          : {dims}")
+        log_fn(f"  attention_resolutions: {self.attention_resolutions}")
+        log_fn(f"  num_heads_upsample   : {self.num_heads_upsample}")
+        log_fn(f"  use_scale_shift_norm : {use_scale_shift_norm}")
 
         time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
@@ -435,6 +452,10 @@ class UNetModel(nn.Module):
             SiLU(),
             zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
         )
+        log_fn(f"  input_blocks : {len(self.input_blocks)}")
+        log_fn(f"  middle_block : {len(self.middle_block)}")
+        log_fn(f"  output_blocks: {len(self.output_blocks)}")
+        log_fn(f"  out          : {len(self.out)}")
 
     def convert_to_fp16(self):
         """
