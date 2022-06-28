@@ -5,6 +5,8 @@ numpy array. This can be used to produce samples for FID evaluation.
 
 import argparse
 import os
+if not os.environ.get("CUDA_VISIBLE_DEVICES"):
+    os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 import numpy as np
 import torch as th
@@ -18,21 +20,26 @@ from improved_diffusion.script_util import (
     add_dict_to_argparser,
     args_to_dict,
 )
+from PIL import Image
 
 
 def main():
     args = create_argparser().parse_args()
 
     dist_util.setup_dist()
-    logger.configure()
+    logger.configure('./logSampling')
+    logger.log(f"pid   : {os.getpid()}")
+    logger.log(f"cwd   : {os.getcwd()}")
+    logger.log(f"torch.initial_seed(): {th.initial_seed()}")
+    logger.log(f"os.environ['CUDA_VISIBLE_DEVICES']: {os.environ['CUDA_VISIBLE_DEVICES']}")
+    logger.log(args)
 
     logger.log("creating model and diffusion...")
     model, diffusion = create_model_and_diffusion(
         **args_to_dict(args, model_and_diffusion_defaults().keys())
     )
-    model.load_state_dict(
-        dist_util.load_state_dict(args.model_path, map_location="cpu")
-    )
+    logger.log(f"model.load_state_dict: {args.model_path}")
+    model.load_state_dict(dist_util.load_state_dict(args.model_path, map_location="cuda"))
     model.to(dist_util.dev())
     model.eval()
 
@@ -72,31 +79,75 @@ def main():
 
     arr = np.concatenate(all_images, axis=0)
     arr = arr[: args.num_samples]
+    # arr shape: [B, H, W, C], such as [100, 32, 32, 3]
+    # and arr element value is from [0, 255]
     if args.class_cond:
         label_arr = np.concatenate(all_labels, axis=0)
         label_arr = label_arr[: args.num_samples]
     if dist.get_rank() == 0:
         shape_str = "x".join([str(x) for x in arr.shape])
+        folder = logger.get_dir()
         out_path = os.path.join(logger.get_dir(), f"samples_{shape_str}.npz")
         logger.log(f"saving to {out_path}")
         if args.class_cond:
             np.savez(out_path, arr, label_arr)
+            save_image_one_by_one(folder, arr, label_arr)
         else:
             np.savez(out_path, arr)
+            save_image_one_by_one(folder, arr)
 
     dist.barrier()
     logger.log("sampling complete")
 
 
+def save_image_one_by_one(folder, arr, label_arr=None):
+    """
+    save image one by one
+    :param folder:
+    :param arr:       shape should be [B, H, W, C]
+    :param label_arr:
+    :return:
+    """
+    for idx in range(len(arr)):
+        if label_arr:
+            out_path = os.path.join(folder, f"sample_{idx:03d}_{label_arr[idx]}.png")
+        else:
+            out_path = os.path.join(folder, f"sample_{idx:03d}.png")
+        img = arr[idx]  # [H, W, C]
+        save_image(out_path, img)
+
+
+def save_image(filename, image_255):
+    """
+    save image into file
+    :param image_255: Tensor with shape: 32x32x3; value range [0, 255]
+    :param filename
+    :return:
+    """
+    image_np = image_255
+    image_np = image_np.astype(np.uint8)
+    res = Image.fromarray(image_np)
+    res.save(filename)
+
+
 def create_argparser():
     defaults = dict(
         clip_denoised=True,
-        num_samples=10000,
+        num_samples=16,
         batch_size=16,
         use_ddim=False,
-        model_path="",
+        # model_path="./model_pt/cifar10_ema_0.9999_050000.pt",
+        model_path="./model_pt/imagenet64_uncond_100M_1500K.pt",
     )
     defaults.update(model_and_diffusion_defaults())
+    defaults['image_size'] = 64
+    defaults['num_channels'] = 128
+    defaults['num_res_blocks'] = 3
+    defaults['diffusion_steps'] = 4000
+    defaults['noise_schedule'] = 'cosine'
+    defaults['learn_sigma'] = True
+    defaults['timestep_respacing'] = ''
+
     parser = argparse.ArgumentParser()
     add_dict_to_argparser(parser, defaults)
     return parser
